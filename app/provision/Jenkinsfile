@@ -1,0 +1,99 @@
+pipeline{
+    agent any
+
+    environment {
+        IAC_REPOSITORY = "https://github.com/josefloressv/aws-cluster-ecs-apps-terragrunt.git"
+    }
+
+    parameters{
+        string(
+            name: "APP_NAME",
+            defaultValue: "app01-nodejs"
+        )
+    }
+
+    options{
+        disableConcurrentBuilds()
+        timestamps()
+        buildDiscarder(logRotator(daysToKeepStr: '30'))
+    }
+
+    stages{
+        stage("Prepare") {
+            steps{
+                cleanWs()
+                script {
+                    if (env.APP_NAME == null || env.APP_NAME == "") {
+                        error "APP_NAME is required"
+                    }
+                    currentBuild.displayName = "#${BUILD_NUMBER} ${env.APP_NAME}"
+
+                    //TG directory for the app
+                    env.TG_APP_DIR = "${WORKSPACE}/testing/${env.APP_NAME}"
+
+                }
+            }
+        }
+        stage("Checkout") {
+            steps{
+                git branch:'main', url:env.IAC_REPOSITORY
+            }
+        }
+        stage("Check TG Dir") {
+            steps{
+                script {
+                    if (!fileExists("${env.TG_APP_DIR}/terragrunt.hcl")) {
+                        error "Directory ${env.TG_APP_DIR} does not exists. Please check the APP_NAME parameter"
+                    }
+                }
+            }
+        }
+        stage("TG Init") {
+            steps{
+                script {
+                    dir("${env.TG_APP_DIR}/") {
+                        sh "terragrunt init"
+                    }
+                }
+            }
+        }        
+        stage("TG Validate") {
+            steps{
+                script {
+                    dir("${env.TG_APP_DIR}/") {
+                        sh "terragrunt validate"
+                    }
+                }
+            }
+        }
+        stage("TG Plan") {
+            steps{
+                script {
+                    dir("${env.TG_APP_DIR}/") {
+                        sh "terragrunt plan --out=out.tfplan"
+                    }
+                }
+            }
+        }
+        stage("TG Apply") {
+            steps{
+                script {
+                    dir("${env.TG_APP_DIR}/") {
+                        sh "terragrunt apply out.tfplan"
+                    }
+                }
+            }
+        }
+    }
+    post{
+        always{
+            echo "========always========"
+        }
+        success{
+            echo "========pipeline executed successfully ========"
+        }
+        failure{
+            echo "========pipeline execution failed========"
+        }
+    }
+}
