@@ -1,0 +1,59 @@
+pipeline{
+    agent any
+
+    environment {
+        AWS_CLUSTER_NAME = "TestingFargateCluster"
+    }
+
+    parameters{
+        string(
+            name: "APP_NAME",
+            defaultValue: "app01-nodejs"
+        )
+        string(
+            name: "REPLICAS",
+            defaultValue: "2"
+        )
+    }
+
+    options{
+        disableConcurrentBuilds()
+        timestamps()
+        buildDiscarder(logRotator(daysToKeepStr: '30'))
+    }
+
+    stages{
+        stage("Prepare") {
+            steps{
+                cleanWs()
+                script {
+                    if (env.APP_NAME == null || env.APP_NAME == "") {
+                        error "APP_NAME is required"
+                    }
+                    currentBuild.displayName = "#${BUILD_NUMBER} ${env.APP_NAME}"
+                }
+            }
+        }
+        stage("Check ECS service") {
+            steps{
+                echo "checking ECS service"
+            }
+        }
+        stage("restart") {
+            steps{
+                sh 'aws ecs update-service --region ${GLOBAL_AWS_REGION} --service ${APP_NAME} --cluster ${AWS_CLUSTER_NAME} --desired-count ${REPLICAS} --force-new-deployment'
+            }
+        }
+    }
+    post{
+        always{
+            echo "========always========"
+        }
+        success{
+            echo "========pipeline executed successfully ========"
+        }
+        failure{
+            echo "========pipeline execution failed========"
+        }
+    }
+}
