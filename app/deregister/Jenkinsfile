@@ -1,0 +1,51 @@
+pipeline{
+    agent any
+
+    parameters{
+        string(
+            name: "APP_NAME",
+            defaultValue: "app01-nodejs"
+        )
+    }
+
+    options{
+        disableConcurrentBuilds()
+        timestamps()
+        buildDiscarder(logRotator(daysToKeepStr: '30'))
+    }
+
+    stages{
+        stage("Prepare") {
+            steps{
+                cleanWs()
+                script {
+                    if (env.APP_NAME == null || env.APP_NAME == "") {
+                        error "APP_NAME is required"
+                    }
+                    currentBuild.displayName = "#${BUILD_NUMBER} ${env.APP_NAME}"
+                }
+            }
+        }
+        stage("ECR destroy") {
+            steps{
+                build job: 'ecr_destroy', parameters: [string(name: 'APP_NAME', value: env.APP_NAME)]
+            }
+        }
+        stage("App infra destroy") {
+            steps{
+                build job: 'app_destroy', parameters: [string(name: 'APP_NAME', value: env.APP_NAME)]
+            }
+        }
+    }
+    post{
+        always{
+            echo "========always========"
+        }
+        success{
+            echo "========pipeline executed successfully ========"
+        }
+        failure{
+            echo "========pipeline execution failed========"
+        }
+    }
+}
